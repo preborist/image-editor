@@ -30,7 +30,7 @@ The displayed (and exported) image is a **pure function** `render(original, oper
 { id, type: 'filter',    parameters: { name: 'grayscale' | 'sepia', amount } } // 0..1
 ```
 
-Operations apply in the canonical order **`transform → crop → adjust → filter`**. Crop coordinates live in the *transformed* image's pixels, so cropping the previewed (already oriented) image is 1:1. When the transform changes, the store **remaps the crop rectangle** (`remapCrop`) through original-image space so it keeps covering the same content — this way flipping/rotating an already-cropped photo transforms that crop, *and* cropping an already-transformed photo crops what you see.
+Operations apply in the canonical order **`transform → crop → adjust → filter`**. Crop coordinates live in the _transformed_ image's pixels, so cropping the previewed (already oriented) image is 1:1. When the transform changes, the store **remaps the crop rectangle** (`remapCrop`) through original-image space so it keeps covering the same content — this way flipping/rotating an already-cropped photo transforms that crop, _and_ cropping an already-transformed photo crops what you see.
 
 ### JSON export shape
 
@@ -38,7 +38,9 @@ Operations apply in the canonical order **`transform → crop → adjust → fil
 {
   "version": 1,
   "source": { "name": "photo.jpg", "width": 4000, "height": 3000 },
-  "operations": [ /* EditOperation[] in apply order */ ]
+  "operations": [
+    /* EditOperation[] in apply order */
+  ],
 }
 ```
 
@@ -66,7 +68,7 @@ src/
 
 ## Key decisions & trade-offs
 
-**Single canvas pipeline for preview *and* export.** `render(source, operations, scale)` is the only place pixels are produced. The preview calls it at a fit-to-viewport scale; export calls it at `scale = 1` (full resolution). One code path makes "what you see is what you export" structurally guaranteed instead of a thing that drifts between two implementations. The only difference between preview and export is the output resolution.
+**Single canvas pipeline for preview _and_ export.** `render(source, operations, scale)` is the only place pixels are produced. The preview calls it at a fit-to-viewport scale; export calls it at `scale = 1` (full resolution). One code path makes "what you see is what you export" structurally guaranteed instead of a thing that drifts between two implementations. The only difference between preview and export is the output resolution.
 
 **`context.filter` string instead of per-pixel loops.** Adjustments and filters compose into a CSS filter string (`brightness() contrast() saturate() grayscale() sepia()`) set on the 2D context before a single `drawImage`. This is GPU-accelerated, keeps sliders smooth even at full resolution, and stays tiny in code. The trade-off is a dependency on `context.filter` (well supported in modern evergreen browsers) and a fixed set of filter primitives — exotic effects would need per-pixel access, which is out of scope. The normalized-unit → filter-string mapping lives in exactly one place (`renderPipeline.ts`).
 
@@ -78,9 +80,9 @@ src/
 
 **rAF-throttled preview.** Slider bursts are coalesced to at most one render per animation frame; because the queued frame reads live state when it fires, the final settled value is always the one rendered.
 
-**Transforms without clipping.** Mirror + rotation are one consolidated `transform` op. `render()` first orients the source into an intermediate canvas sized to the rotated image's axis-aligned bounding box (center-based `scale`/`rotate`), so nothing is clipped and corners stay transparent, then crops that oriented canvas. The same math runs at any scale, so preview still equals export. JPEG export composites over a white matte (it has no alpha); PNG keeps transparency. Fine rotation ("straighten") is limited to ±45° in 1° steps.
+**Transforms without clipping.** Mirror + rotation are one consolidated `transform` op. `render()` first orients the source into an intermediate canvas sized to the rotated image's axis-aligned bounding box (center-based `scale`/`rotate`), so nothing is clipped and corners stay transparent, then crops that oriented canvas. The same math runs at any scale, so preview still equals export. JPEG export composites over a white matte (it has no alpha); PNG keeps transparency. Fine rotation ("straighten") is limited to ±180° in 1° steps.
 
-**Crop ↔ transform stay consistent.** Crop is stored in the transformed image's pixels, so cropping the previewed (already oriented) image is 1:1 — you crop what you see. To also make "flip/rotate an already-cropped image" transform *that crop*, the store remaps the crop rectangle whenever the transform changes (`remapCrop`), treating a flip or 90° rotation as a **frame flip/rotate in box space**: the crop's dimensions are preserved exactly and it keeps tracking the same content, even with a non-zero straighten angle and across repeated flips/rotations. Straighten (fine-angle) changes don't remap the crop — the frame stays put while the image rotates under it.
+**Crop ↔ transform stay consistent.** Crop is stored in the transformed image's pixels, so cropping the previewed (already oriented) image is 1:1 — you crop what you see. To also make "flip/rotate an already-cropped image" transform _that crop_, the store remaps the crop rectangle whenever the transform changes (`remapCrop`), treating a flip or 90° rotation as a **frame flip/rotate in box space**: the crop's dimensions are preserved exactly and it keeps tracking the same content, even with a non-zero straighten angle and across repeated flips/rotations. Straighten (fine-angle) changes don't remap the crop — the frame stays put while the image rotates under it.
 
 **Undo/redo via operation-stack snapshots.** The store keeps `undoHistory`/`redoHistory` arrays of whole operation-stack snapshots. Discrete actions snapshot themselves; continuous slider drags snapshot once at interaction start (`@start`) so a drag is a single history entry. Snapshotting the tiny operation array avoids per-operation inverse logic entirely. Reset and loading a new image clear history. Shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y.
 
