@@ -1,0 +1,11 @@
+@use 'sass:map';
+@use 'variables' as v;
+
+// Look up a breakpoint value by name; fails loudly on a typo.
+@function breakpoint($name) {
+  @if not map.has-key(v.$breakpoints, $name) {
+    @error 'Unknown breakpoint `#{$name}`. Valid: #{map.keys(v.$breakpoints)}.';
+  }
+
+  @return map.get(v.$breakpoints, $name);
+}

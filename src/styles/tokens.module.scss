@@ -1,0 +1,23 @@
+// ICSS :export bridge — makes the SCSS design tokens readable from TypeScript
+// so the Vuetify JS themes are derived from the exact same values (single source
+// of truth). Imported as an object of strings in the Vuetify plugin.
+@use 'variables' as v;
+
+:export {
+  // Brand (shared by both themes)
+  primary: v.$color-primary;
+  accent: v.$color-accent;
+  danger: v.$color-danger;
+  warning: v.$color-warning;
+  fontFamily: v.$font-family-base;
+
+  // Dark theme surfaces/text
+  darkBg: v.$dark-bg;
+  darkSurface: v.$dark-surface;
+  darkText: v.$dark-text;
+
+  // Light theme surfaces/text
+  lightBg: v.$light-bg;
+  lightSurface: v.$light-surface;
+  lightText: v.$light-text;
+}

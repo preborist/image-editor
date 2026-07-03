@@ -1,0 +1,8 @@
+// Vuetify SASS variable overrides, derived from our design tokens.
+// Wired via vite-plugin-vuetify's `styles.configFile` so Vuetify's own SASS is
+// compiled with these overrides — same tokens that feed the JS theme.
+@use 'variables' as v;
+@use 'vuetify/settings' with (
+  $border-radius-root: v.$radius-sm,
+  $body-font-family: v.$font-family-base
+);
