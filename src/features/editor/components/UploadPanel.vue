@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-import { ACCEPTED_TYPES, ImageLoadError, useImageLoader } from '../composables/useImageLoader'
+import {
+  ACCEPTED_EXTENSIONS,
+  ACCEPTED_TYPES,
+  ImageLoadError,
+  useImageLoader,
+} from '../composables/useImageLoader'
 import { useEditorStore } from '../store/editor'
 
 const store = useEditorStore()
@@ -10,7 +15,8 @@ const { loadFile } = useImageLoader()
 const fileInput = ref<HTMLInputElement | null>(null)
 const isDragging = ref(false)
 const error = ref<string | null>(null)
-const accept = ACCEPTED_TYPES.join(',')
+// Extensions too, so iOS lets HEIC through the picker even with an odd MIME type.
+const accept = [...ACCEPTED_TYPES, ...ACCEPTED_EXTENSIONS].join(',')
 
 async function handleFile(file: File | undefined) {
   if (!file) return

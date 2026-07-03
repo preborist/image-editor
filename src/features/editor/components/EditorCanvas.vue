@@ -63,6 +63,12 @@ function endCompare() {
     <div
       ref="container"
       class="canvas-stage__viewport"
+      :class="{ 'canvas-stage__viewport--comparable': store.operations.length > 0 }"
+      @pointerdown="startCompare"
+      @pointerup="endCompare"
+      @pointerleave="endCompare"
+      @pointercancel="endCompare"
+      @contextmenu.prevent
     >
       <canvas
         ref="canvas"
@@ -109,6 +115,16 @@ function endCompare() {
     background: repeating-conic-gradient(#1a1d23 0% 25%, #212530 0% 50%) 50% / 24px 24px;
     border-radius: v.$radius-md;
     overflow: hidden;
+
+    // Press-and-hold on the image itself reveals the original. This is the only
+    // way to compare on small screens, where the button below is hidden.
+    &--comparable {
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none; // no iOS "save image" popup on long-press
+      touch-action: none; // long-press compares instead of scrolling/selecting
+    }
   }
 
   &__canvas {
@@ -133,6 +149,13 @@ function endCompare() {
   &__bar {
     @include mx.flex-center;
     flex: 0 0 auto;
+    // Small screens: the edit menu overlaps this bar, so drop it entirely and
+    // rely on press-and-hold directly on the image (see &__viewport--comparable).
+    display: none;
+
+    @include mx.breakpoint-up('sm') {
+      display: flex;
+    }
   }
 }
 </style>

@@ -238,6 +238,143 @@ function filterFn(operation: FilterOp): string {
   }
 }
 
+// --- Manual pixel fallback (browsers without CanvasRenderingContext2D.filter) -
+// iOS forces every browser onto WebKit, where ctx.filter is unsupported/unreliable
+// on older versions: assigning it is silently ignored, so color ops just vanish
+// while geometry (transform/crop) still works. When we detect no native support we
+// replicate the SAME filter chain by hand on the pixel buffer, so preview===export
+// holds on both paths. Formulas mirror the CSS/SVG filter primitives exactly.
+
+/** One color-only transform on non-premultiplied 0..255 channels. */
+type PixelOp = (r: number, g: number, b: number) => [number, number, number]
+
+function brightnessOp(multiplier: number): PixelOp {
+  return (r, g, b) => [r * multiplier, g * multiplier, b * multiplier]
+}
+
+function contrastOp(amount: number): PixelOp {
+  // CSS contrast() pivots around mid-gray (0.5 => 127.5 in 0..255).
+  return (r, g, b) => [
+    (r - 127.5) * amount + 127.5,
+    (g - 127.5) * amount + 127.5,
+    (b - 127.5) * amount + 127.5,
+  ]
+}
+
+/** SVG feColorMatrix "saturate" (s=1 identity, s=0 fully gray). */
+function saturateOp(s: number): PixelOp {
+  return (r, g, b) => [
+    (0.213 + 0.787 * s) * r + (0.715 - 0.715 * s) * g + (0.072 - 0.072 * s) * b,
+    (0.213 - 0.213 * s) * r + (0.715 + 0.285 * s) * g + (0.072 - 0.072 * s) * b,
+    (0.213 - 0.213 * s) * r + (0.715 - 0.715 * s) * g + (0.072 + 0.928 * s) * b,
+  ]
+}
+
+/** SVG feColorMatrix "sepia" (a=0 identity, a=1 full sepia). */
+function sepiaOp(amount: number): PixelOp {
+  const inverse = 1 - amount
+  return (r, g, b) => [
+    (0.393 + 0.607 * inverse) * r + (0.769 - 0.769 * inverse) * g + (0.189 - 0.189 * inverse) * b,
+    (0.349 - 0.349 * inverse) * r + (0.686 + 0.314 * inverse) * g + (0.168 - 0.168 * inverse) * b,
+    (0.272 - 0.272 * inverse) * r + (0.534 - 0.534 * inverse) * g + (0.131 + 0.869 * inverse) * b,
+  ]
+}
+
+/**
+ * Ordered pixel ops equivalent to buildFilterString's chain. Kept in lockstep
+ * with the switch in buildFilterString so both render paths stay identical.
+ * grayscale(a) is exactly saturate(1 - a) per the CSS spec.
+ */
+function buildPixelOps(operations: EditOperation[]): PixelOp[] {
+  const pixelOps: PixelOp[] = []
+
+  for (const operation of operations) {
+    switch (operation.type) {
+      case 'transform':
+      case 'crop':
+        break
+      case 'adjust':
+        pixelOps.push(brightnessOp(toMultiplier(operation.parameters.brightness)))
+        pixelOps.push(contrastOp(toMultiplier(operation.parameters.contrast)))
+        pixelOps.push(saturateOp(toMultiplier(operation.parameters.saturation)))
+        break
+      case 'filter':
+        switch (operation.parameters.name) {
+          case 'grayscale':
+            pixelOps.push(saturateOp(1 - operation.parameters.amount))
+            break
+          case 'sepia':
+            pixelOps.push(sepiaOp(operation.parameters.amount))
+            break
+          default:
+            assertNever(operation.parameters.name)
+        }
+        break
+      default:
+        assertNever(operation)
+    }
+  }
+
+  return pixelOps
+}
+
+function toByte(value: number): number {
+  return value < 0 ? 0 : value > 255 ? 255 : value
+}
+
+/** Apply the pixel-op chain in place over the whole canvas. No-op if empty. */
+function applyPixelOps(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  pixelOps: PixelOp[],
+): void {
+  if (pixelOps.length === 0) return
+  const imageData = context.getImageData(0, 0, width, height)
+  const data = imageData.data
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i] ?? 0
+    let g = data[i + 1] ?? 0
+    let b = data[i + 2] ?? 0
+    for (const op of pixelOps) {
+      ;[r, g, b] = op(r, g, b)
+    }
+    data[i] = toByte(r)
+    data[i + 1] = toByte(g)
+    data[i + 2] = toByte(b)
+  }
+  context.putImageData(imageData, 0, 0)
+}
+
+/**
+ * Whether CanvasRenderingContext2D.filter actually takes effect (cached).
+ *
+ * We CANNOT trust the property round-trip: WebKit/iOS lets you assign and read
+ * back `ctx.filter` (so `filter === 'blur(1px)'` is true) while completely
+ * ignoring it when drawing. So we run a real functional test — paint white
+ * through brightness(0) and check the pixel actually turned black.
+ */
+let contextFilterSupported: boolean | null = null
+function supportsContextFilter(): boolean {
+  if (contextFilterSupported !== null) return contextFilterSupported
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    contextFilterSupported = false
+    return contextFilterSupported
+  }
+  context.filter = 'brightness(0)'
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, 1, 1)
+  context.filter = 'none'
+  // If the filter was applied, white -> black (r ~ 0); if ignored, r stays ~255.
+  const red = context.getImageData(0, 0, 1, 1).data[0] ?? 255
+  contextFilterSupported = red < 10
+  return contextFilterSupported
+}
+
 /**
  * Compose the CSS filter string for a set of ops. Exhaustive over the op union:
  * adding a new EditOperation variant without handling it fails the build.
@@ -326,7 +463,8 @@ export function render(
   canvas.width = sourceWidth
   canvas.height = sourceHeight
   context.clearRect(0, 0, sourceWidth, sourceHeight)
-  context.filter = buildFilterString(operations)
+  const useNativeFilter = supportsContextFilter()
+  context.filter = useNativeFilter ? buildFilterString(operations) : 'none'
   context.imageSmoothingQuality = 'high'
   context.drawImage(
     orientedCanvas,
@@ -340,6 +478,12 @@ export function render(
     sourceHeight,
   )
   context.filter = 'none'
+
+  // Fallback for engines (e.g. WebKit/iOS) that ignore context.filter: apply the
+  // same color chain manually so filters/adjustments are not silently dropped.
+  if (!useNativeFilter) {
+    applyPixelOps(context, sourceWidth, sourceHeight, buildPixelOps(operations))
+  }
 
   return canvas
 }
