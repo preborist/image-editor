@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { useEditorStore } from '../store/editor'
+import { MAXIMUM_FINE_ANGLE, MINIMUM_FINE_ANGLE } from '../types'
 
 const store = useEditorStore()
 
@@ -9,8 +10,30 @@ const transform = computed(() => store.transform)
 
 const fineAngle = computed<number>({
   get: () => store.transform.fineAngle,
-  set: (degrees) => store.setFineAngle(Math.round(degrees)),
+  set: (degrees) => store.setFineAngle(degrees),
 })
+
+/**
+ * Local model for the numeric input. Every keystroke is clamped to the
+ * allowed range immediately, and the clamped value is written back to the
+ * input so it can never display an out-of-range number.
+ */
+const angleInput = ref<number>(fineAngle.value)
+
+watch(fineAngle, (degrees) => {
+  angleInput.value = degrees
+})
+
+function onAngleInput(value: string | number) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return
+
+  const clamped = Math.min(MAXIMUM_FINE_ANGLE, Math.max(MINIMUM_FINE_ANGLE, parsed))
+
+  fineAngle.value = clamped
+  // Correct the displayed value even when the store value is unchanged.
+  angleInput.value = clamped
+}
 
 const isIdentity = computed(
   () =>
@@ -114,8 +137,8 @@ function resetTransform() {
       <div class="transform__fine-row">
         <v-slider
           v-model="fineAngle"
-          :min="-45"
-          :max="45"
+          :min="MINIMUM_FINE_ANGLE"
+          :max="MAXIMUM_FINE_ANGLE"
           :step="1"
           hide-details
           density="compact"
@@ -124,16 +147,17 @@ function resetTransform() {
           @start="store.snapshot()"
         />
         <v-text-field
-          v-model.number="fineAngle"
+          v-model.number="angleInput"
           type="number"
-          :min="-45"
-          :max="45"
+          :min="MINIMUM_FINE_ANGLE"
+          :max="MAXIMUM_FINE_ANGLE"
           :step="1"
           density="compact"
           variant="outlined"
           hide-details
           class="transform__angle-input"
-          @update:model-value="store.snapshot()"
+          @focus="store.snapshot()"
+          @update:model-value="onAngleInput"
         />
       </div>
     </div>

@@ -10,6 +10,8 @@ import {
   type EditOperation,
   type FilterName,
   isTransformIdentity,
+  MAXIMUM_FINE_ANGLE,
+  MINIMUM_FINE_ANGLE,
   OPERATIONS_DOCUMENT_VERSION,
   type OpsDocument,
   type SourceInfo,
@@ -243,7 +245,13 @@ export const useEditorStore = defineStore('editor', () => {
 
   /** Fine rotation in degrees. Continuous — UI snapshots at drag start. */
   function setFineAngle(degrees: number) {
-    upsertTransform({ fineAngle: degrees })
+    if (!Number.isFinite(degrees)) return
+
+    const boundedDegrees = Math.min(
+      MAXIMUM_FINE_ANGLE,
+      Math.max(MINIMUM_FINE_ANGLE, Math.round(degrees)),
+    )
+    upsertTransform({ fineAngle: boundedDegrees })
   }
 
   /** Reset — clear the whole stack and history, restoring the original. */

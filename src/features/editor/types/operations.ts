@@ -97,6 +97,9 @@ export const TRANSFORM_IDENTITY: TransformParams = {
   mirrorVertical: false,
 }
 
+export const MINIMUM_FINE_ANGLE = -180
+export const MAXIMUM_FINE_ANGLE = 180
+
 /** True when a transform has no visible effect. */
 export function isTransformIdentity(transformParameters: TransformParams): boolean {
   return (
