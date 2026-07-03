@@ -37,6 +37,10 @@ body,
   height: 100%;
 }
 
+html:root {
+  overflow-y: auto;
+}
+
 body {
   margin: 0;
   font-family: v.$font-family-base;

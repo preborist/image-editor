@@ -119,12 +119,14 @@ watch(cropping, (isActive) => {
 
         <v-btn
           v-if="store.hasImage"
+          class="editor__new-image"
           size="small"
           variant="text"
           prepend-icon="mdi-image-plus-outline"
+          aria-label="New image"
           @click="newImage"
         >
-          New image
+          <span class="editor__new-image-label">New image</span>
         </v-btn>
       </div>
     </header>
@@ -228,6 +230,26 @@ watch(cropping, (isActive) => {
     align-items: center;
     gap: v.$space-3xs;
     margin-left: auto;
+  }
+
+  &__new-image {
+    flex: 0 0 auto;
+  }
+
+  @media (max-width: 400px) {
+    &__new-image {
+      width: 40px;
+      min-width: 40px;
+      padding-inline: 0;
+
+      :deep(.v-btn__prepend) {
+        margin-inline: 0;
+      }
+    }
+
+    &__new-image-label {
+      display: none;
+    }
   }
 
   &__upload {
