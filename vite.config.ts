@@ -6,6 +6,9 @@ import { defineConfig } from 'vite'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import vuetify from 'vite-plugin-vuetify'
 
+const repoName = 'image-editor'
+const isProd = process.env.NODE_ENV === 'production'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -25,4 +28,5 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  base: isProd ? `/${repoName}/` : '/',
 })
